@@ -26,11 +26,12 @@ def process_messages(messages, participants):
         try:
             text = msg.get("content", "")
             decoded_text = text.encode('latin-1', 'ignore').decode('utf-8')
-            emoji_text = decoded_text.encode('latin-1', 'ignore').decode('utf-8')
+            emoji_text = emoji.emojize(decoded_text)
+
 
             username = msg["sender_name"]
             decoded_username = username.encode('latin-1', 'ignore').decode('utf-8')
-            emoji_username = decoded_username.encode('latin-1', 'ignore').decode('utf-8')
+            emoji_username = emoji.emojize(decoded_username)
 
             ts = msg["timestamp_ms"]
             timestamp_sec = ts / 1000
