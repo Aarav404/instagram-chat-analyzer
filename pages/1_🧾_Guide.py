@@ -7,8 +7,6 @@ st.set_page_config(
 )
 st.logo("logo.png")
 
-st.set_page_config(page_title="Page Title", layout="wide")
-
 st.write('# 📥 Retrieve your files from instagram\n---')
 st.write('''### 1. Open link\n- Open [instagram's download page↗](https://accountscenter.instagram.com/info_and_permissions/) and log in.
 \n- Then click Request a download''')
