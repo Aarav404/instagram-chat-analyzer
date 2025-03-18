@@ -1,5 +1,10 @@
-st.set_page_config(page_title="Guide", page_icon="🧾", layout="wide")
+import streamlit as st
 
+st.set_page_config(
+    page_title="Guide",
+    page_icon="🧾",
+    layout="wide"
+)
 st.logo("logo.png")
 
 st.set_page_config(page_title="Page Title", layout="wide")
