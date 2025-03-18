@@ -2,11 +2,9 @@ import json
 import statistics
 from datetime import datetime
 import streamlit as st
-import emoji
 import pandas as pd
 from collections import defaultdict
 import matplotlib.pyplot as plt
-from docutils.parsers.rst.directives import percentage
 
 
 def process_messages(messages, participants):
@@ -28,11 +26,11 @@ def process_messages(messages, participants):
         try:
             text = msg.get("content", "")
             decoded_text = text.encode('latin-1', 'ignore').decode('utf-8')
-            emoji_text = emoji.emojize(decoded_text)
+            emoji_text = decoded_text.encode('latin-1', 'ignore').decode('utf-8')
 
             username = msg["sender_name"]
             decoded_username = username.encode('latin-1', 'ignore').decode('utf-8')
-            emoji_username = emoji.emojize(decoded_username)
+            emoji_username = decoded_username.encode('latin-1', 'ignore').decode('utf-8')
 
             ts = msg["timestamp_ms"]
             timestamp_sec = ts / 1000
