@@ -2,9 +2,10 @@ import streamlit as st
 
 st.set_page_config(
     page_title="Guide",
-    page_icon="🧾",
+    page_icon=":material/developer_guide:",
     layout="wide"
 )
+
 st.logo("logo.png")
 
 st.write('# 📥 How to Download Your Instagram Chat Files')
@@ -32,7 +33,8 @@ with col2:
     st.write('📂 Format: **JSON**')
 with col3:
     st.write('🖼️ Media Quality: **Low**')
-st.write('- Make sure to **Save** each setting before proceeding.\n- You can select a shorter date range for a faster download.')
+st.write(
+    '- Make sure to **Save** each setting before proceeding.\n- You can select a shorter date range for a faster download.')
 st.image('https://app.doubletext.me/onboarding/messenger/4-messenger.png', width=450)
 st.divider()
 
@@ -49,4 +51,6 @@ st.write('''## 5️⃣ Locate Your Conversation Files
 4. Open the folder and upload **message_1.json** (and any additional message files) on the Statistics page.''')
 
 if st.button("📊 Go to Statistics"):
-    st.switch_page("2_📊_Statistics.py")
+    st.switch_page("../1_📊_Statistics.py")
+
+
