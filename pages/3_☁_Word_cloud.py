@@ -9,7 +9,7 @@ st.set_page_config(
     page_icon="☁",
     layout="wide"
 )
-
+st.logo("logo.png")
 # Ensure that the words are processed with emojis if necessary
 if 'words' in st.session_state:
     words = [emoji.emojize(word) for word in st.session_state['words']]
