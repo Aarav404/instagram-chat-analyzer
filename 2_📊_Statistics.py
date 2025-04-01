@@ -7,6 +7,7 @@ import emoji
 from collections import defaultdict
 import matplotlib.pyplot as plt
 
+# st.session_state.clear()  
 
 def process_messages(messages, participants):
     """Processes the messages data and extracts statistics."""
@@ -15,7 +16,7 @@ def process_messages(messages, participants):
     person1 = 0
     person2 = 0
     dates = []
-
+    rawtime = []
     if len(participants) < 2:
         return [], count, 0, 0, dates, "N/A", "N/A"
 
@@ -36,7 +37,7 @@ def process_messages(messages, participants):
             ts = msg["timestamp_ms"]
             timestamp_sec = ts / 1000
             dates.append(datetime.fromtimestamp(timestamp_sec).strftime("%d-%m-%Y"))
-
+            rawtime.append(datetime.fromtimestamp(timestamp_sec))
             # Compare after normalizing names
             if emoji_username == participant1:
                 person1 += 1
@@ -52,7 +53,7 @@ def process_messages(messages, participants):
     mode_word = statistics.mode(words) if words else "N/A"
     mode_date = statistics.mode(dates) if dates else "N/A"
 
-    return words, count, person1, person2, dates, mode_word, mode_date
+    return words, count, person1, person2, dates, mode_word, mode_date, rawtime
 
 
 def calculate_streaks(alldates):
@@ -82,9 +83,21 @@ def calculate_streaks(alldates):
             streak_start = dates[i]
             streak_end = dates[i]
 
-    first_msg = dates[0]
+    first_msg = min(dates)
 
     return longest_streak, longest_start, longest_end, first_msg
+
+
+def avg_reply_time(times):
+    minuteslist = []
+    for i in range(1, len(times)):
+        deltatime = abs((times[i - 1] - times[i]).total_seconds())
+        minuteslist.append(deltatime)
+    avgsec = statistics.mean(minuteslist)
+    return avgsec // 60
+
+    # avgtime = statistics.mean(minuteslist)
+    # return avgtime
 
 
 st.set_page_config(
@@ -94,9 +107,10 @@ st.set_page_config(
 )
 st.logo(image='logo.png')
 
+
 st.write('# 🔍 Instagram chat Analysis\n---\n ### To know how to retrieve your instagram chat files go to the guide')
-if st.button("🧾 Guide"):
-    st.switch_page('pages/1_🧾_Guide.py')
+if st.button(":material/developer_guide: Tutorial"):
+    st.switch_page('pages/3_🧾_Guide.py')
 
 st.write('---\nUpload JSON files of the chat your want to analyse here')
 uploaded_files = st.file_uploader("Choose JSON files", type='json', accept_multiple_files=True)
@@ -117,7 +131,9 @@ if uploaded_files:
     participants = list(participants)
 
     if messages:
-        words, count, person1, person2, dates, mode_word, mode_date = process_messages(messages, participants)
+        words, count, person1, person2, dates, mode_word, mode_date, rawtimes = process_messages(messages, participants)
+        if "words" not in st.session_state:
+            st.session_state['words'] = words
         st.divider()
         col1, col2, col3 = st.columns(3, border=True)
         with col1:
@@ -131,7 +147,18 @@ if uploaded_files:
 
         col4, col5, col6 = st.columns(3, border=True)
         with col4:
-            st.write(f'## Date most talked on\n---\n### :blue[{mode_date}]')
+            avgtime = avg_reply_time(rawtimes)
+            avgmin = int(avgtime % 60)
+            avghr = int(avgtime // 60)
+            avgdays = int(avghr // 24)
+            avghr = int(avghr % 24)
+            if avgdays > 0:
+                st.write(
+                    f"## Average reply time\n---\n### :blue[{avgdays}] days :blue[{avghr}] hours :blue[{avgmin}] minutes")
+            elif avghr > 0:
+                st.write(f"## Average reply time\n---\n### :blue[{avghr}] hours :blue[{avgmin}] minutes")
+            else:
+                st.write(f"## Average reply time\n---\n### :blue[{avgmin}] minutes")
 
         with col5:
             st.write(f'## {participants[0].encode('latin-1').decode('utf-8')}\'s share\n---')
@@ -139,7 +166,7 @@ if uploaded_files:
             with percentagecol1:
                 person1percentage = round(person1 / count * 100)
 
-                fig, ax = plt.subplots(figsize=(0.8, 0.8), dpi=500)
+                fig, ax = plt.subplots(figsize=(0.7, 0.7), dpi=500)
                 fig.patch.set_alpha(0)
                 ax.pie([person1percentage, 100 - person1percentage],
                        colors=["#A3E635", "white"],
@@ -160,7 +187,7 @@ if uploaded_files:
             with percentagecol1:
                 person2percentage = round(person2 / count * 100)
 
-                fig, ax = plt.subplots(figsize=(0.8, 0.8), dpi=500)
+                fig, ax = plt.subplots(figsize=(0.7, 0.7), dpi=500)
                 fig.patch.set_alpha(0)
                 ax.pie([person2percentage, 100 - person2percentage],
                        colors=["#A3E635", "white"],
@@ -176,6 +203,7 @@ if uploaded_files:
                 st.write(f'### of messages were sent by :blue[{participants[1].encode('latin-1').decode('utf-8')}]')
 
         st.write('---\n## Lifetime Activity')
+        st.write(f"### Day most talked on - :blue[{mode_date}]\n")
         date_sender_counts = defaultdict(lambda: defaultdict(int))
 
         for msg in messages:
@@ -207,4 +235,6 @@ if uploaded_files:
         with col9:
             diff = datetime.now() - firstmsg
             st.write(
-                f'## First message\n---\n ### :blue[{firstmsg.strftime("%d-%m-%Y")}]\n Which was :blue[{diff.days // 30}] months ago')
+                f'## First message\n---\n ### :blue[{firstmsg.strftime("%d-%m-%Y")}]\n Which was :blue[{diff.days // 30}] months and :blue[{diff.days % 30}] days ago')
+
+
