@@ -7,7 +7,6 @@ import emoji
 from collections import defaultdict
 import matplotlib.pyplot as plt
 
-# st.session_state.clear()  
 
 def process_messages(messages, participants):
     """Processes the messages data and extracts statistics."""
@@ -47,7 +46,7 @@ def process_messages(messages, participants):
             chat += " " + emoji_text
 
         except Exception as e:
-            print(f"Error processing message: {e}")
+            st.write(f"Error processing message: {e}")
 
     words = chat.split()
     mode_word = statistics.mode(words) if words else "N/A"
@@ -110,7 +109,7 @@ st.logo(image='logo.png')
 
 st.write('# 🔍 Instagram chat Analysis\n---\n ### To know how to retrieve your instagram chat files go to the guide')
 if st.button(":material/developer_guide: Tutorial"):
-    st.switch_page('pages/3_🧾_Guide.py')
+    st.switch_page('pages/1_🧾_Guide.py')
 
 st.write('---\nUpload JSON files of the chat your want to analyse here')
 uploaded_files = st.file_uploader("Choose JSON files", type='json', accept_multiple_files=True)

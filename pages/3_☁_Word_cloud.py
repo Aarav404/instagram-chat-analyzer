@@ -30,5 +30,9 @@ def generate_wordcloud(words):
 
 if 'words' in st.session_state:
     generate_wordcloud(words)
+    if st.button(":material/restart_alt: Reset Wordcloud"):
+        st.session_state.clear()
 else:
-    st.write("# No words found please upload files in statistics")
+    st.write("# No words found, please upload files in statistics")
+    if st.button("📊 Statistics"):
+        st.switch_page('2_📊_Statistics.py')
