@@ -51,6 +51,6 @@ st.write('''## 5️⃣ Locate Your Conversation Files
 4. Open the folder and upload **message_1.json** (and any additional message files) on the Statistics page.''')
 
 if st.button("📊 Go to Statistics"):
-    st.switch_page("../1_📊_Statistics.py")
+    st.switch_page("2_📊_Statistics.py")
 
 
