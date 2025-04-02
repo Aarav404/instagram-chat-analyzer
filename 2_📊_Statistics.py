@@ -202,7 +202,8 @@ if uploaded_files:
                 st.write(f'### of messages were sent by :blue[{participants[1].encode('latin-1').decode('utf-8')}]')
 
         st.write('---\n## Lifetime Activity')
-        st.write(f"### Day most talked on - :blue[{mode_date}]\n")
+        mode_date_num = dates.count(mode_date)
+        st.write(f"### Day most talked on - :blue[{mode_date}], :blue[{mode_date_num}] messages were sent that day")
         date_sender_counts = defaultdict(lambda: defaultdict(int))
 
         for msg in messages:
