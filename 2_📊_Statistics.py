@@ -236,5 +236,3 @@ if uploaded_files:
             diff = datetime.now() - firstmsg
             st.write(
                 f'## First message\n---\n ### :blue[{firstmsg.strftime("%d-%m-%Y")}]\n Which was :blue[{diff.days // 30}] months and :blue[{diff.days % 30}] days ago')
-
-
