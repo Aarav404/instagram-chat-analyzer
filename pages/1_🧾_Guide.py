@@ -44,11 +44,9 @@ st.write('''## 4️⃣ Download Your Files
 st.image('https://app.doubletext.me/onboarding/messenger/5-messenger.png''', width=450)
 st.divider()
 
-st.write('''## 5️⃣ Locate Your Conversation Files
-1. **Unzip** the downloaded folder.
-2. Navigate to: `your_instagram_activity/messages/inbox/`
-3. Find the folder for the conversation you want to analyze.
-4. Open the folder and upload **message_1.json** (and any additional message files) on the Statistics page.''')
+st.write('''## 5️⃣ Wait for the download to finish
+After the download is finish go back to the same page and download the file
+Then upload it to Statistics page''')
 
 if st.button("📊 Go to Statistics"):
     st.switch_page("2_📊_Statistics.py")
