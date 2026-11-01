@@ -1,238 +1,200 @@
 import json
-import statistics
+import re
+import io
+import zipfile
+from pathlib import Path
+from collections import Counter
 from datetime import datetime, timedelta
-import streamlit as st
+
 import pandas as pd
-import emoji
-from collections import defaultdict
-import matplotlib.pyplot as plt
+import streamlit as st
 
 
-def process_messages(messages, participants):
-    """Processes the messages data and extracts statistics."""
-    count = len(messages)
-    chat = ""
-    person1 = 0
-    person2 = 0
-    dates = []
-    rawtime = []
-    if len(participants) < 2:
-        return [], count, 0, 0, dates, "N/A", "N/A"
+st.set_page_config(page_title="Instagram Chat Analysis", page_icon="📊", layout="wide")
+st.logo("logo.png")
+st.title("🔍 Instagram chat analysis")
+st.write("Explore your conversations, create groups for alternate accounts, and view combined stats.")
 
-    # Normalize participant names for consistent comparison
-    participant1 = participants[0].encode('latin-1', 'ignore').decode('utf-8')
-    participant2 = participants[1].encode('latin-1', 'ignore').decode('utf-8')
-
-    for msg in messages:
-        try:
-            text = msg.get("content", "")
-            decoded_text = text.encode('latin-1', 'ignore').decode('utf-8')
-            emoji_text = emoji.emojize(decoded_text)
-
-            username = msg["sender_name"]
-            decoded_username = username.encode('latin-1', 'ignore').decode('utf-8')
-            emoji_username = emoji.emojize(decoded_username)
-
-            ts = msg["timestamp_ms"]
-            timestamp_sec = ts / 1000
-            dates.append(datetime.fromtimestamp(timestamp_sec).strftime("%d-%m-%Y"))
-            rawtime.append(datetime.fromtimestamp(timestamp_sec))
-            # Compare after normalizing names
-            if emoji_username == participant1:
-                person1 += 1
-            elif emoji_username == participant2:
-                person2 += 1
-
-            chat += " " + emoji_text
-
-        except Exception as e:
-            st.write(f"Error processing message: {e}")
-
-    words = chat.split()
-    mode_word = statistics.mode(words) if words else "N/A"
-    mode_date = statistics.mode(dates) if dates else "N/A"
-
-    return words, count, person1, person2, dates, mode_word, mode_date, rawtime
+st.write("Upload your Instagram data export ZIP. The app finds conversation JSON files under `messages/inbox` inside the archive; media files are ignored.")
+uploaded_zip = st.file_uploader("Choose Instagram export (.zip)", type=["zip"])
+whatsapp_files = st.file_uploader("Add WhatsApp chat export (.txt)", type=["txt"], accept_multiple_files=True)
 
 
-def calculate_streaks(alldates):
-    dates = list(dict.fromkeys(alldates))
-    dates.reverse()
-    dates = [datetime.strptime(date, "%d-%m-%Y") for date in dates]
-
-    longest_streak = 0
-    current_streak = 1
-
-    streak_start = dates[0]
-    streak_end = dates[0]
-
-    longest_start = streak_start
-    longest_end = streak_end
-
-    for i in range(1, len(dates)):
-        if (dates[i] - dates[i - 1]) == timedelta(days=1):
-            current_streak += 1
-            streak_end = dates[i]
-        else:
-            if current_streak > longest_streak:
-                longest_streak = current_streak
-                longest_start = streak_start
-                longest_end = streak_end
-            current_streak = 1
-            streak_start = dates[i]
-            streak_end = dates[i]
-
-    first_msg = min(dates)
-
-    return longest_streak, longest_start, longest_end, first_msg
-
-
-def avg_reply_time(times):
-    minuteslist = []
-    for i in range(1, len(times)):
-        deltatime = abs((times[i - 1] - times[i]).total_seconds())
-        minuteslist.append(deltatime)
-    avgsec = statistics.mean(minuteslist)
-    return avgsec // 60
-
-    # avgtime = statistics.mean(minuteslist)
-    # return avgtime
-
-
-st.set_page_config(
-    page_title="Home - Chat Stats",
-    page_icon="🏠",
-    layout="wide"
-)
-st.logo(image='logo.png')
-
-
-st.write('# 🔍 Instagram chat Analysis\n---\n ### To know how to retrieve your instagram chat files go to the guide')
-if st.button(":material/developer_guide: Tutorial"):
-    st.switch_page('pages/1_🧾_Guide.py')
-
-st.write('---\nUpload JSON files of the chat your want to analyse here')
-uploaded_files = st.file_uploader("Choose JSON files", type='json', accept_multiple_files=True)
-
-if uploaded_files:
+def parse_whatsapp(file):
+    # WhatsApp exports use one timestamped line per message; continuation lines
+    # belong to the preceding message. Accept both 12-hour and 24-hour clocks.
+    pattern = re.compile(r"^\[([\d/]+),\s*(\d{1,2}:\d{2}(?::\d{2})?\s*[APMapm]*)\]\s*(.*?):\s?(.*)$")
     messages = []
-    participants = set()
+    current = None
+    for line in file.getvalue().decode("utf-8-sig", errors="replace").splitlines():
+        match = pattern.match(line)
+        if match:
+            if current:
+                messages.append(current)
+            date_text, time_text, sender, content = match.groups()
+            time_text = " ".join(time_text.replace("\u202f", " ").split())
+            parsed = None
+            for fmt in ("%d/%m/%y, %I:%M:%S %p", "%d/%m/%y, %I:%M %p", "%d/%m/%y, %H:%M:%S", "%d/%m/%y, %H:%M"):
+                try:
+                    parsed = datetime.strptime(f"{date_text}, {time_text}", fmt)
+                    break
+                except ValueError:
+                    pass
+            if parsed:
+                current = {"sender_name": sender.strip(), "timestamp_ms": int(parsed.timestamp() * 1000), "content": content.strip()}
+        elif current and line.strip():
+            current["content"] += "\n" + line
+    if current:
+        messages.append(current)
+    if not messages:
+        st.warning(f"No timestamped WhatsApp messages found in {file.name}.")
+        return None
+    participants = sorted({m["sender_name"] for m in messages})
+    other = next((p for p in participants if p.casefold() not in {"aarav", "aarav rohatgi", "you"}), participants[0])
+    return {"name": f"{other} (WhatsApp)", "messages": messages, "participants": participants}
 
-    for file in uploaded_files:
+def load_conversation(file):
+    try:
+        data = json.load(file)
+        messages = data.get("messages", [])
+        people = [p.get("name", "Unknown") for p in data.get("participants", [])]
+        if not messages:
+            return None
+        names = sorted({m.get("sender_name", "Unknown") for m in messages} | set(people))
+        # Instagram exports identify a conversation by title and participant list.
+        # For one-to-one chats, show the other participant rather than the export owner.
+        title = data.get("title")
+        peer = next((n for n in names if n != "Aarav" and n != "Unknown"), None)
+        return {"name": title or peer or "Unknown", "messages": messages, "participants": names}
+    except (json.JSONDecodeError, AttributeError, TypeError) as exc:
+        st.warning(f"Could not read {file.name}: {exc}")
+        return None
+
+
+if uploaded_zip or whatsapp_files:
+    conversations = {}
+    if uploaded_zip:
         try:
-            data = json.load(file)
-            messages.extend(data.get("messages", []))
-            for participant in data.get("participants", []):
-                participants.add(participant["name"])
-        except json.JSONDecodeError:
-            st.error(f"Error decoding JSON from {file.name}")
+            with zipfile.ZipFile(io.BytesIO(uploaded_zip.getvalue())) as archive:
+                file_names = sorted(n for n in archive.namelist() if "/messages/inbox/" in n and Path(n).name.startswith("message_") and n.endswith(".json"))
+                if not file_names:
+                    st.error("This ZIP has no conversation JSON files under messages/inbox.")
+                for file_name in file_names:
+                    try:
+                        data = json.loads(archive.read(file_name).decode("utf-8"))
+                        conversation = load_conversation(io.StringIO(json.dumps(data)))
+                    except (UnicodeDecodeError, json.JSONDecodeError, KeyError) as exc:
+                        st.warning(f"Could not read {Path(file_name).name}: {exc}")
+                        continue
+                    if conversation:
+                        key = conversation["name"]
+                        entry = conversations.setdefault(key, {"messages": [], "participants": set()})
+                        entry["messages"].extend(conversation["messages"])
+                        entry["participants"].update(conversation["participants"])
+        except (zipfile.BadZipFile, OSError) as exc:
+            st.error(f"Could not open ZIP file: {exc}")
 
-    participants = list(participants)
+    for file in whatsapp_files or []:
+        conversation = parse_whatsapp(file)
+        if conversation:
+            entry = conversations.setdefault(conversation["name"], {"messages": [], "participants": set()})
+            entry["messages"].extend(conversation["messages"])
+            entry["participants"].update(conversation["participants"])
 
-    if messages:
-        words, count, person1, person2, dates, mode_word, mode_date, rawtimes = process_messages(messages, participants)
-        if "words" not in st.session_state:
-            st.session_state['words'] = words
-        st.divider()
-        col1, col2, col3 = st.columns(3, border=True)
-        with col1:
-            st.write(f"## Total messages\n---\n### :blue[{"{:,}".format(count)}] messages")
-        with col2:
-            st.write(
-                f"## Messages by {participants[0].encode('latin-1').decode('utf-8')}\n---\n### :blue[{"{:,}".format(person1)}] messages")
-        with col3:
-            st.write(
-                f"## Messages by {participants[1].encode('latin-1').decode('utf-8')}\n---\n### :blue[{"{:,}".format(person2)}] messages")
+    if conversations:
+        names = sorted(conversations)
+        group_file = Path(__file__).resolve().parent / ".chat_groups.json"
+        try:
+            groups = json.loads(group_file.read_text(encoding="utf-8")) if group_file.exists() else {}
+        except (json.JSONDecodeError, OSError):
+            groups = {}
 
-        col4, col5, col6 = st.columns(3, border=True)
-        with col4:
-            avgtime = avg_reply_time(rawtimes)
-            avgmin = int(avgtime % 60)
-            avghr = int(avgtime // 60)
-            avgdays = int(avghr // 24)
-            avghr = int(avghr % 24)
-            if avgdays > 0:
-                st.write(
-                    f"## Average reply time\n---\n### :blue[{avgdays}] days :blue[{avghr}] hours :blue[{avgmin}] minutes")
-            elif avghr > 0:
-                st.write(f"## Average reply time\n---\n### :blue[{avghr}] hours :blue[{avgmin}] minutes")
-            else:
-                st.write(f"## Average reply time\n---\n### :blue[{avgmin}] minutes")
+        with st.expander("👥 Make or edit groups", expanded=False):
+            group_name = st.text_input("Group name", placeholder="e.g. Alex")
+            members = st.multiselect("Add members", names, key="group_members")
+            if st.button("Finalize group", type="primary"):
+                if not group_name.strip() or not members:
+                    st.error("Enter a group name and select at least one chat.")
+                else:
+                    groups[group_name.strip()] = members
+                    group_file.write_text(json.dumps(groups, indent=2), encoding="utf-8")
+                    st.success(f"Saved group {group_name.strip()}.")
+                    st.rerun()
+            if groups:
+                remove_group = st.selectbox("Remove a saved group", ["—"] + sorted(groups))
+                if remove_group != "—" and st.button("Remove group"):
+                    del groups[remove_group]
+                    group_file.write_text(json.dumps(groups, indent=2), encoding="utf-8")
+                    st.rerun()
 
-        with col5:
-            st.write(f'## {participants[0].encode('latin-1').decode('utf-8')}\'s share\n---')
-            percentagecol1, textcol1 = st.columns(2)
-            with percentagecol1:
-                person1percentage = round(person1 / count * 100)
+        views = {name: [name] for name in names}
+        for group, members in groups.items():
+            valid = [m for m in members if m in conversations]
+            if valid:
+                views[f"{group} (group)"] = valid
 
-                fig, ax = plt.subplots(figsize=(0.7, 0.7), dpi=500)
-                fig.patch.set_alpha(0)
-                ax.pie([person1percentage, 100 - person1percentage],
-                       colors=["#A3E635", "white"],
-                       startangle=90,
-                       wedgeprops={"width": 0.2})
-                ax.text(0, 0, f"{person1percentage}%",
-                        ha="center", va="center", fontsize=5, fontweight="bold", color="white")
-                ax.set_xticks([])
-                ax.set_yticks([])
-                ax.set_frame_on(False)
-                st.pyplot(fig, use_container_width=False)
-            with textcol1:
-                st.write(f'### of messages were sent by :blue[{participants[0].encode('latin-1').decode('utf-8')}]')
+        def messages_for(member_names):
+            return [m for member in member_names for m in conversations[member]["messages"]]
 
-        with col6:
-            st.write(f'## {participants[1].encode('latin-1').decode('utf-8')}\'s share\n---')
-            percentagecol1, textcol1 = st.columns(2)
-            with percentagecol1:
-                person2percentage = round(person2 / count * 100)
-
-                fig, ax = plt.subplots(figsize=(0.7, 0.7), dpi=500)
-                fig.patch.set_alpha(0)
-                ax.pie([person2percentage, 100 - person2percentage],
-                       colors=["#A3E635", "white"],
-                       startangle=90,
-                       wedgeprops={"width": 0.2})
-                ax.text(0, 0, f"{person2percentage}%",
-                        ha="center", va="center", fontsize=5, fontweight="bold", color="white")
-                ax.set_xticks([])
-                ax.set_yticks([])
-                ax.set_frame_on(False)
-                st.pyplot(fig, use_container_width=False)
-            with textcol1:
-                st.write(f'### of messages were sent by :blue[{participants[1].encode('latin-1').decode('utf-8')}]')
-
-        st.write('---\n## Lifetime Activity')
-        mode_date_num = dates.count(mode_date)
-        st.write(f"### Day most talked on - :blue[{mode_date}]\n### :blue[{mode_date_num}] messages were sent that day")
-        date_sender_counts = defaultdict(lambda: defaultdict(int))
-
-        for msg in messages:
-            date = datetime.fromtimestamp(msg["timestamp_ms"] / 1000).strftime("%Y-%m-%d")
-
+        rows = []
+        for name, member_names in views.items():
+            msgs = messages_for(member_names)
+            stamps = [m["timestamp_ms"] for m in msgs if isinstance(m.get("timestamp_ms"), (int, float))]
+            rows.append({"Person / group": name, "Accounts": len(member_names), "Messages": len(msgs), "Last active": datetime.fromtimestamp(max(stamps) / 1000).strftime("%Y-%m-%d") if stamps else "—"})
+        overview = pd.DataFrame(rows).sort_values("Messages", ascending=False)
+        st.subheader("Who you talked to most")
+        st.dataframe(overview, hide_index=True, use_container_width=True)
+        st.bar_chart(overview.set_index("Person / group")["Messages"])
+        selected = st.selectbox("View full stats for", list(views))
+        member_names = views[selected]
+        msgs = messages_for(member_names)
+        sender_counts = Counter(m.get("sender_name", "Unknown") for m in msgs)
+        account_counts = Counter({name: len(conversations[name]["messages"]) for name in member_names})
+        dated = []
+        for m in msgs:
             try:
-                sender = msg["sender_name"].encode('latin-1', 'ignore').decode('utf-8')
-            except (UnicodeDecodeError, AttributeError):
-                sender = msg["sender_name"]
-
-            date_sender_counts[date][sender] += 1
-
-        df = pd.DataFrame.from_dict(date_sender_counts, orient="index").fillna(0)
-
-        st.bar_chart(df)
-
-        st.divider()
-        st.write("## Streaks")
-        longest_streak, longest_start, longest_end, firstmsg = calculate_streaks(dates)
-        col7, col8, col9 = st.columns(3, border=True)
-
-        with col7:
-            st.write(f"## Longest Streak \n---\n ### :blue[{longest_streak}] days ")
-
-        with col8:
-            st.write(
-                f'## Streak was from \n---\n ### :blue[{longest_start.strftime("%d-%m-%Y")}] to :blue[{longest_end.strftime("%d-%m-%Y")}]')
-
-        with col9:
-            diff = datetime.now() - firstmsg
-            st.write(
-                f'## First message\n---\n ### :blue[{firstmsg.strftime("%d-%m-%Y")}]\n Which was :blue[{diff.days // 30}] months and :blue[{diff.days % 30}] days ago')
+                dated.append((datetime.fromtimestamp(m["timestamp_ms"] / 1000), m.get("sender_name", "Unknown")))
+            except (KeyError, TypeError, ValueError, OSError):
+                continue
+        st.subheader(f"Stats with {selected}")
+        sent_counts = Counter(m.get("sender_name", "Unknown") for m in msgs)
+        own_names = set().union(*(conversations[n]["participants"] for n in member_names))
+        own_sender = next((n for n in own_names if n.casefold() in {"aarav", "you"}), None)
+        own_count = sent_counts.get(own_sender, 0) if own_sender else sent_counts.get("You", 0)
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("Total messages", f"{len(msgs):,}")
+        c2.metric("Your messages", f"{own_count:,}")
+        c3.metric("Messages by other accounts", f"{len(msgs) - own_count:,}")
+        c4.metric("Your share", f"{own_count / len(msgs) * 100:.1f}%" if msgs else "0%")
+        if dated:
+            daily = Counter(dt.strftime("%Y-%m-%d") for dt, _ in dated)
+            st.metric("Most active day", max(daily, key=daily.get), help=f"{max(daily.values())} messages")
+            st.line_chart(pd.Series(daily).sort_index())
+            st.caption(f"Conversation spans {min(dt for dt, _ in dated).date()} to {max(dt for dt, _ in dated).date()}")
+            active_dates = sorted({dt.date() for dt, _ in dated})
+            longest = current = 1
+            start = best_start = active_dates[0]
+            best_end = active_dates[0]
+            for prev, day in zip(active_dates, active_dates[1:]):
+                if day == prev + timedelta(days=1):
+                    current += 1
+                else:
+                    if current > longest:
+                        longest, best_start, best_end = current, start, prev
+                    current, start = 1, day
+            if current > longest:
+                longest, best_start, best_end = current, start, active_dates[-1]
+            st.metric("Longest daily messaging streak", f"{longest} days", help=f"{best_start} to {best_end}")
+            times = sorted(dt for dt, _ in dated)
+            gaps = [(b - a).total_seconds() for a, b in zip(times, times[1:]) if b > a]
+            if gaps:
+                avg_minutes = sum(gaps) / len(gaps) / 60
+                st.metric("Average time between messages", f"{avg_minutes / 60:.1f} hours" if avg_minutes >= 60 else f"{avg_minutes:.1f} minutes")
+        st.write("**Messages by account**")
+        st.bar_chart(pd.Series(account_counts))
+        st.write("**Messages by sender**")
+        st.bar_chart(pd.Series(sender_counts))
+    else:
+        st.info("No conversations were found. Upload an Instagram export ZIP or a WhatsApp text export.")
+else:
+    st.info("Upload an Instagram export ZIP or WhatsApp text export to get started.")
