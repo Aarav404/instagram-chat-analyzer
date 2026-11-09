@@ -215,3 +215,8 @@ if uploaded_zip or whatsapp_files:
         st.info("No conversations were found. Upload an Instagram export ZIP or a WhatsApp text export.")
 else:
     st.info("Upload an Instagram export ZIP or WhatsApp text export to get started.")
+
+st.markdown(
+    "<div style='display:flex; align-items:center; gap:0.8rem; color:#9298a1; font-size:0.78rem; padding:1.5rem 0 0.5rem;'><span style='flex:1; height:1px; background:#555b64;'></span><span style='white-space:nowrap;'>Made by Aaloe</span><span style='flex:1; height:1px; background:#555b64;'></span></div>",
+    unsafe_allow_html=True,
+)
