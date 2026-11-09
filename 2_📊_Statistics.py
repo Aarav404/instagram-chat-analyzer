@@ -204,7 +204,13 @@ if uploaded_zip or whatsapp_files:
         st.write("**Messages by account**")
         st.bar_chart(pd.Series(account_counts))
         st.write("**Messages by sender**")
-        st.bar_chart(pd.Series(sender_counts))
+        sender_counts = Counter({
+            sender: count
+            for sender, count in sender_counts.items()
+            if "meta ai" not in sender.casefold()
+        })
+        if sender_counts:
+            st.bar_chart(pd.Series(sender_counts))
     else:
         st.info("No conversations were found. Upload an Instagram export ZIP or a WhatsApp text export.")
 else:
