@@ -50,7 +50,7 @@ def parse_whatsapp(file):
         st.warning(f"No timestamped WhatsApp messages found in {file.name}.")
         return None
     participants = sorted({m["sender_name"] for m in messages})
-    other = next((p for p in participants if p.casefold() not in {"aarav", "aarav rohatgi", "you"}), participants[0])
+    other = Path(file.name).stem
     return {"name": f"{other} (WhatsApp)", "messages": messages, "participants": participants}
 
 def load_conversation(file):
@@ -64,7 +64,7 @@ def load_conversation(file):
         # Instagram exports identify a conversation by title and participant list.
         # For one-to-one chats, show the other participant rather than the export owner.
         title = data.get("title")
-        peer = next((n for n in names if n != "Aarav" and n != "Unknown"), None)
+        peer = next((n for n in names if n != "Unknown"), None)
         return {"name": title or peer or "Unknown", "messages": messages, "participants": names}
     except (json.JSONDecodeError, AttributeError, TypeError) as exc:
         st.warning(f"Could not read {file.name}: {exc}")
@@ -103,6 +103,19 @@ if uploaded_zip or whatsapp_files:
 
     if conversations:
         names = sorted(conversations)
+        sender_frequency = Counter(
+            sender
+            for conversation in conversations.values()
+            for sender in conversation["participants"]
+        )
+        sender_options = sorted(sender_frequency)
+        likely_owner = max(sender_options, key=sender_frequency.get) if sender_options else None
+        own_sender = st.selectbox(
+            "Which participant name is yours?",
+            sender_options,
+            index=sender_options.index(likely_owner) if likely_owner else 0,
+            help="Choose the name you use in these exports. It is used to calculate your message count and share.",
+        )
         group_file = Path(__file__).resolve().parent / ".chat_groups.json"
         try:
             groups = json.loads(group_file.read_text(encoding="utf-8")) if group_file.exists() else {}
@@ -158,9 +171,7 @@ if uploaded_zip or whatsapp_files:
                 continue
         st.subheader(f"Stats with {selected}")
         sent_counts = Counter(m.get("sender_name", "Unknown") for m in msgs)
-        own_names = set().union(*(conversations[n]["participants"] for n in member_names))
-        own_sender = next((n for n in own_names if n.casefold() in {"aarav", "you"}), None)
-        own_count = sent_counts.get(own_sender, 0) if own_sender else sent_counts.get("You", 0)
+        own_count = sent_counts.get(own_sender, 0)
         c1, c2, c3, c4 = st.columns(4)
         c1.metric("Total messages", f"{len(msgs):,}")
         c2.metric("Your messages", f"{own_count:,}")
