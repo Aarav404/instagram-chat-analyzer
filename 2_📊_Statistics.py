@@ -8,6 +8,8 @@ from datetime import datetime, timedelta
 
 import pandas as pd
 import streamlit as st
+import matplotlib.pyplot as plt
+from matplotlib.colors import LinearSegmentedColormap
 
 
 st.set_page_config(page_title="Instagram Chat Analysis", page_icon="📊", layout="wide")
@@ -101,6 +103,21 @@ if uploaded_zip or whatsapp_files:
             entry["messages"].extend(conversation["messages"])
             entry["participants"].update(conversation["participants"])
 
+    # Ignore Meta AI messages and participants consistently across every view.
+    for conversation in conversations.values():
+        conversation["messages"] = [
+            message for message in conversation["messages"]
+            if "meta ai" not in str(message.get("sender_name", "")).casefold()
+        ]
+        conversation["participants"] = {
+            participant for participant in conversation["participants"]
+            if "meta ai" not in participant.casefold()
+        }
+    conversations = {
+        name: conversation for name, conversation in conversations.items()
+        if conversation["messages"]
+    }
+
     if conversations:
         names = sorted(conversations)
         sender_frequency = Counter(
@@ -110,11 +127,12 @@ if uploaded_zip or whatsapp_files:
         )
         sender_options = sorted(sender_frequency)
         likely_owner = max(sender_options, key=sender_frequency.get) if sender_options else None
-        own_sender = st.selectbox(
-            "Which participant name is yours?",
+        default_owner_names = [likely_owner] if likely_owner else []
+        own_senders = st.multiselect(
+            "Which participant names are yours?",
             sender_options,
-            index=sender_options.index(likely_owner) if likely_owner else 0,
-            help="Choose the name you use in these exports. It is used to calculate your message count and share.",
+            default=default_owner_names,
+            help="Select every name or alternate account that belongs to you. This keeps grouped sender shares accurate.",
         )
         group_file = Path(__file__).resolve().parent / ".chat_groups.json"
         try:
@@ -171,17 +189,12 @@ if uploaded_zip or whatsapp_files:
                 continue
         st.subheader(f"Stats with {selected}")
         sent_counts = Counter(m.get("sender_name", "Unknown") for m in msgs)
-        own_count = sent_counts.get(own_sender, 0)
+        own_sender_set = set(own_senders)
+        own_count = sum(count for sender, count in sent_counts.items() if sender in own_sender_set)
         c1, c2, c3, c4 = st.columns(4)
-        c1.metric("Total messages", f"{len(msgs):,}")
-        c2.metric("Your messages", f"{own_count:,}")
-        c3.metric("Messages by other accounts", f"{len(msgs) - own_count:,}")
-        c4.metric("Your share", f"{own_count / len(msgs) * 100:.1f}%" if msgs else "0%")
         if dated:
-            daily = Counter(dt.strftime("%Y-%m-%d") for dt, _ in dated)
-            st.metric("Most active day", max(daily, key=daily.get), help=f"{max(daily.values())} messages")
-            st.line_chart(pd.Series(daily).sort_index())
-            st.caption(f"Conversation spans {min(dt for dt, _ in dated).date()} to {max(dt for dt, _ in dated).date()}")
+            dated.sort(key=lambda item: item[0])
+            daily = Counter(dt.date() for dt, _ in dated)
             active_dates = sorted({dt.date() for dt, _ in dated})
             longest = current = 1
             start = best_start = active_dates[0]
@@ -195,22 +208,162 @@ if uploaded_zip or whatsapp_files:
                     current, start = 1, day
             if current > longest:
                 longest, best_start, best_end = current, start, active_dates[-1]
-            st.metric("Longest daily messaging streak", f"{longest} days", help=f"{best_start} to {best_end}")
-            times = sorted(dt for dt, _ in dated)
-            gaps = [(b - a).total_seconds() for a, b in zip(times, times[1:]) if b > a]
-            if gaps:
-                avg_minutes = sum(gaps) / len(gaps) / 60
-                st.metric("Average time between messages", f"{avg_minutes / 60:.1f} hours" if avg_minutes >= 60 else f"{avg_minutes:.1f} minutes")
-        st.write("**Messages by account**")
-        st.bar_chart(pd.Series(account_counts))
-        st.write("**Messages by sender**")
-        sender_counts = Counter({
-            sender: count
-            for sender, count in sender_counts.items()
-            if "meta ai" not in sender.casefold()
-        })
-        if sender_counts:
-            st.bar_chart(pd.Series(sender_counts))
+            ordered = [m for _, m in sorted(
+                ((datetime.fromtimestamp(m["timestamp_ms"] / 1000), m)
+                 for m in msgs if isinstance(m.get("timestamp_ms"), (int, float))),
+                key=lambda item: item[0]
+            )]
+            reply_gaps = []
+            previous = None
+            for message in ordered:
+                sender = message.get("sender_name", "Unknown")
+                timestamp = message.get("timestamp_ms", 0) / 1000
+                if previous and sender != previous[0]:
+                    gap = timestamp - previous[1]
+                    if 0 <= gap <= 7 * 24 * 60 * 60:
+                        reply_gaps.append(gap)
+                previous = (sender, timestamp)
+            avg_reply_minutes = sum(reply_gaps) / len(reply_gaps) / 60 if reply_gaps else None
+            c1.metric("Total messages", f"{len(msgs):,}")
+            c2.metric("Busiest day", max(daily, key=daily.get).strftime("%b %d"), help=f"{max(daily.values())} messages")
+            c3.metric("Longest active streak", f"{longest} days", help=f"{best_start} to {best_end}")
+            c4.metric("Average reply time", f"{avg_reply_minutes / 60:.1f} hours" if avg_reply_minutes is not None and avg_reply_minutes >= 60 else (f"{avg_reply_minutes:.1f} min" if avg_reply_minutes is not None else "—"))
+
+            st.write("**Daily activity**")
+            daily_series = pd.Series(daily, dtype="int64").sort_index()
+            daily_frame = daily_series.rename("Messages").to_frame()
+            daily_frame["7-day average"] = daily_series.rolling(7, min_periods=1).mean()
+            st.line_chart(daily_frame)
+            st.caption(f"{active_dates[0]} to {active_dates[-1]} · 7-day average smooths the daily message count")
+
+            st.write("**Who sent the messages**")
+            is_custom_group = selected.endswith(" (group)")
+            is_multi_person_chat = len(conversations[member_names[0]]["participants"]) > 2 if len(member_names) == 1 else False
+            if is_custom_group:
+                you_count = sum(n for sender, n in sent_counts.items() if sender in own_sender_set)
+                other_count = sum(n for sender, n in sent_counts.items() if sender not in own_sender_set and "meta ai" not in sender.casefold())
+                share_counts = Counter({"You": you_count, "Other sender": other_count})
+            elif is_multi_person_chat:
+                share_counts = Counter({s: n for s, n in sent_counts.items() if "meta ai" not in s.casefold()})
+            else:
+                other_count = sum(n for sender, n in sent_counts.items() if sender not in own_sender_set and "meta ai" not in sender.casefold())
+                share_counts = Counter({"You": own_count, "Other person": other_count})
+            share_counts = Counter({s: n for s, n in share_counts.items() if n > 0})
+            if share_counts:
+                cols = st.columns(min(len(share_counts), 4))
+                total_share = sum(share_counts.values()) or 1
+                palette = ["#a3e635", "#60a5fa", "#fb923c", "#c084fc", "#f472b6", "#2dd4bf"]
+                for i, (col, (label, count)) in enumerate(zip(cols, share_counts.items())):
+                    percentage = count / total_share * 100
+                    fig, ax = plt.subplots(figsize=(1.25, 1.25), dpi=110)
+                    fig.patch.set_alpha(0)
+                    ax.pie(
+                        [percentage, 100 - percentage],
+                        startangle=90,
+                        colors=[palette[i % len(palette)], "#44474b"],
+                        wedgeprops={"width": 0.11, "edgecolor": "none"},
+                    )
+                    ax.text(0, 0, f"{percentage:.0f}%", ha="center", va="center", color="white", fontsize=11, fontweight="bold")
+                    ax.set(aspect="equal")
+                    ax.axis("off")
+                    col.markdown(f"**{label}**")
+                    col.pyplot(fig, use_container_width=False)
+                    col.caption(f"{count:,} messages")
+                    plt.close(fig)
+
+            st.write("**Conversation patterns**")
+            sender_delays = Counter()
+            sender_double_texts = Counter()
+            sender_initiations = Counter()
+            delay_samples = []
+            last_timestamp = None
+            pending_sender = None
+            pending_count = 0
+            session_gap = 6 * 60 * 60
+            for message in ordered:
+                sender = message.get("sender_name", "Unknown")
+                timestamp = message.get("timestamp_ms", 0) / 1000
+                if last_timestamp is None or timestamp - last_timestamp > session_gap:
+                    sender_initiations[sender] += 1
+                    pending_sender, pending_count = sender, 1
+                elif sender == pending_sender:
+                    pending_count += 1
+                else:
+                    if pending_count > 1:
+                        sender_double_texts[pending_sender] += pending_count - 1
+                    delay = timestamp - last_timestamp
+                    if 0 <= delay <= 7 * 24 * 60 * 60:
+                        sender_delays[sender] += 1
+                        delay_samples.append(delay)
+                    pending_sender, pending_count = sender, 1
+                last_timestamp = timestamp
+            if pending_count > 1:
+                sender_double_texts[pending_sender] += pending_count - 1
+
+            pattern_cols = st.columns(4)
+            engagement = (min(share_counts.values()) / max(share_counts.values()) * 100) if len(share_counts) > 1 and max(share_counts.values()) else 100
+            avg_delay = sum(delay_samples) / len(delay_samples) if delay_samples else 0
+            pattern_values = [
+                ("Engagement", engagement, f"{engagement:.0f}%"),
+                ("Delay score", max(0, 100 - avg_delay / 60), f"{avg_delay / 60:.1f} min avg" if delay_samples else "No replies"),
+                ("Double texts", min(100, sum(sender_double_texts.values()) / max(len(ordered), 1) * 100), f"{sum(sender_double_texts.values()):,}"),
+                ("Initiations", min(100, sum(sender_initiations.values()) / max(len(ordered), 1) * 100), f"{sum(sender_initiations.values()):,}"),
+            ]
+            for col, (label, score, value_text), color in zip(pattern_cols, pattern_values, palette):
+                descriptions = {
+                    "Engagement": "Compares message counts between participants. 100% means the counts are equal; lower percentages mean one side sent more messages.",
+                    "Initiations": "Counts who sent the first message in each conversation session. A new session begins after six hours without a message.",
+                }
+                if label in descriptions:
+                    col.metric(label, "", help=descriptions[label])
+                else:
+                    col.markdown(f"**{label}**")
+                score = max(0, min(100, score))
+                fig, ax = plt.subplots(figsize=(1.15, 1.15), dpi=110)
+                fig.patch.set_alpha(0)
+                ax.pie([score, 100 - score], startangle=90, colors=[color, "#44474b"], wedgeprops={"width": 0.12, "edgecolor": "none"})
+                ax.text(0, 0, f"{score:.0f}%", ha="center", va="center", color="white", fontsize=10, fontweight="bold")
+                ax.axis("off")
+                col.pyplot(fig, use_container_width=False)
+                if label not in descriptions:
+                    col.caption(value_text)
+                plt.close(fig)
+
+            pattern_names = sorted(set(sender_delays) | set(sender_double_texts) | set(sender_initiations))
+            if pattern_names:
+                pattern_rows = []
+                for sender in pattern_names:
+                    delay_values = [
+                        (datetime.fromtimestamp(ordered[i]["timestamp_ms"] / 1000) - datetime.fromtimestamp(ordered[i - 1]["timestamp_ms"] / 1000)).total_seconds()
+                        for i in range(1, len(ordered))
+                        if ordered[i].get("sender_name") == sender
+                        and ordered[i - 1].get("sender_name") != sender
+                    ]
+                    delay_values = [d for d in delay_values if 0 <= d <= 7 * 24 * 60 * 60]
+                    pattern_rows.append({
+                        "Sender": sender,
+                        "Median reply delay": f"{pd.Series(delay_values).median() / 60:.1f} min" if delay_values else "—",
+                        "Double texts": sender_double_texts[sender],
+                        "Conversations started": sender_initiations[sender],
+                    })
+                st.dataframe(pd.DataFrame(pattern_rows), hide_index=True, use_container_width=True)
+
+            st.write("**Activity by hour and day**")
+            heat = Counter((dt.weekday(), dt.hour) for dt, _ in dated)
+            heat_df = pd.DataFrame(
+                [[heat[(day, hour)] for hour in range(24)] for day in range(7)],
+                index=["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"],
+                columns=[f"{hour % 12 or 12}{'am' if hour < 12 else 'pm'}" for hour in range(24)],
+            )
+            heatmap_colors = LinearSegmentedColormap.from_list(
+                "dark_to_blue", ["#171a20", "#123c64", "#168bd2", "#9adcf5"]
+            )
+            st.dataframe(
+                heat_df.style.background_gradient(cmap=heatmap_colors),
+                use_container_width=True,
+            )
+        else:
+            c1.metric("Total messages", f"{len(msgs):,}")
     else:
         st.info("No conversations were found. Upload an Instagram export ZIP or a WhatsApp text export.")
 else:
