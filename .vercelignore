@@ -1,0 +1,13 @@
+.git/
+node_modules/
+dist/
+.venv/
+.local/
+__pycache__/
+.DS_Store
+.chat_groups.json
+.env*
+inbox/
+messages/
+*.zip
+*.txt
