@@ -12,9 +12,9 @@ import matplotlib.pyplot as plt
 from matplotlib.colors import LinearSegmentedColormap
 
 
-st.set_page_config(page_title="Instagram Chat Analysis", page_icon="📊", layout="wide")
+st.set_page_config(page_title="aaloe-lyzer", page_icon="📊", layout="wide")
 st.logo("logo.png")
-st.title("🔍 Instagram chat analysis")
+st.title("aaloe-lyzer")
 st.write("Explore your conversations, create groups for alternate accounts, and view combined stats.")
 
 st.write("Upload your Instagram data export ZIP. The app finds conversation JSON files under `messages/inbox` inside the archive; media files are ignored.")

@@ -1,7 +1,7 @@
 import streamlit as st
 
 st.set_page_config(
-    page_title="Guide",
+    page_title="aaloe-lyzer — Import guide",
     page_icon=":material/developer_guide:",
     layout="wide"
 )

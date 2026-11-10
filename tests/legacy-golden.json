@@ -1,0 +1,360 @@
+{
+  "baseline": "f7ad309",
+  "timezone": "UTC",
+  "cases": [
+    {
+      "name": "alternating replies and trailing streak",
+      "total": 8,
+      "averageReplySeconds": 28801.666666666668,
+      "streak": {
+        "days": 3,
+        "start": "2026-01-01",
+        "end": "2026-01-03"
+      },
+      "busiestDay": {
+        "date": "2026-01-01",
+        "count": 4
+      },
+      "daily": [
+        {
+          "date": "2026-01-01",
+          "count": 4,
+          "average": 4
+        },
+        {
+          "date": "2026-01-02",
+          "count": 2,
+          "average": 3
+        },
+        {
+          "date": "2026-01-03",
+          "count": 2,
+          "average": 2.6666666666666665
+        }
+      ],
+      "engagement": 60,
+      "delayScore": 99.54166666666667,
+      "doubleTexts": 0,
+      "doubleTextScore": 0,
+      "initiations": 3,
+      "initiationScore": 37.5,
+      "medians": {
+        "Me": 30,
+        "Peer": 86330
+      },
+      "senderDoubles": {},
+      "senderInitiations": {
+        "Me": 1,
+        "Peer": 2
+      }
+    },
+    {
+      "name": "session boundary drops pending doubles",
+      "total": 6,
+      "averageReplySeconds": 10804,
+      "streak": {
+        "days": 1,
+        "start": "2026-01-01",
+        "end": "2026-01-01"
+      },
+      "busiestDay": {
+        "date": "2026-01-01",
+        "count": 6
+      },
+      "daily": [
+        {
+          "date": "2026-01-01",
+          "count": 6,
+          "average": 6
+        }
+      ],
+      "engagement": 20,
+      "delayScore": 99.88333333333334,
+      "doubleTexts": 1,
+      "doubleTextScore": 16.666666666666664,
+      "initiations": 2,
+      "initiationScore": 33.33333333333333,
+      "medians": {
+        "Me": 7,
+        "Peer": 21601
+      },
+      "senderDoubles": {
+        "Me": 1
+      },
+      "senderInitiations": {
+        "Me": 1,
+        "Peer": 1
+      }
+    },
+    {
+      "name": "inclusive six-hour and seven-day bounds",
+      "total": 6,
+      "averageReplySeconds": 167400.5,
+      "streak": {
+        "days": 2,
+        "start": "2026-01-01",
+        "end": "2026-01-02"
+      },
+      "busiestDay": {
+        "date": "2026-01-01",
+        "count": 2
+      },
+      "daily": [
+        {
+          "date": "2026-01-01",
+          "count": 2,
+          "average": 2
+        },
+        {
+          "date": "2026-01-02",
+          "count": 2,
+          "average": 2
+        },
+        {
+          "date": "2026-01-09",
+          "count": 1,
+          "average": 1.6666666666666667
+        },
+        {
+          "date": "2026-01-16",
+          "count": 1,
+          "average": 1.5
+        }
+      ],
+      "engagement": 100,
+      "delayScore": 0,
+      "doubleTexts": 0,
+      "doubleTextScore": 0,
+      "initiations": 5,
+      "initiationScore": 83.33333333333334,
+      "medians": {
+        "Me": 313200.5,
+        "Peer": 21600.5
+      },
+      "senderDoubles": {},
+      "senderInitiations": {
+        "Me": 3,
+        "Peer": 2
+      }
+    },
+    {
+      "name": "sparse days and no within-session replies",
+      "total": 8,
+      "averageReplySeconds": 345600,
+      "streak": {
+        "days": 1,
+        "start": "2026-01-01",
+        "end": "2026-01-01"
+      },
+      "busiestDay": {
+        "date": "2026-01-01",
+        "count": 1
+      },
+      "daily": [
+        {
+          "date": "2026-01-01",
+          "count": 1,
+          "average": 1
+        },
+        {
+          "date": "2026-01-03",
+          "count": 1,
+          "average": 1
+        },
+        {
+          "date": "2026-01-05",
+          "count": 1,
+          "average": 1
+        },
+        {
+          "date": "2026-01-09",
+          "count": 1,
+          "average": 1
+        },
+        {
+          "date": "2026-01-13",
+          "count": 1,
+          "average": 1
+        },
+        {
+          "date": "2026-01-17",
+          "count": 1,
+          "average": 1
+        },
+        {
+          "date": "2026-01-23",
+          "count": 1,
+          "average": 1
+        },
+        {
+          "date": "2026-01-29",
+          "count": 1,
+          "average": 1
+        }
+      ],
+      "engagement": 100,
+      "delayScore": 100,
+      "doubleTexts": 0,
+      "doubleTextScore": 0,
+      "initiations": 8,
+      "initiationScore": 100,
+      "medians": {
+        "Me": 345600,
+        "Peer": 345600
+      },
+      "senderDoubles": {},
+      "senderInitiations": {
+        "Me": 4,
+        "Peer": 4
+      }
+    },
+    {
+      "name": "equal timestamps and unsorted pages",
+      "total": 6,
+      "averageReplySeconds": 5,
+      "streak": {
+        "days": 1,
+        "start": "2026-01-01",
+        "end": "2026-01-01"
+      },
+      "busiestDay": {
+        "date": "2026-01-01",
+        "count": 6
+      },
+      "daily": [
+        {
+          "date": "2026-01-01",
+          "count": 6,
+          "average": 6
+        }
+      ],
+      "engagement": 100,
+      "delayScore": 99.91666666666667,
+      "doubleTexts": 1,
+      "doubleTextScore": 16.666666666666664,
+      "initiations": 1,
+      "initiationScore": 16.666666666666664,
+      "medians": {
+        "Peer": 0,
+        "Me": 10
+      },
+      "senderDoubles": {
+        "Peer": 1
+      },
+      "senderInitiations": {
+        "Me": 1
+      }
+    },
+    {
+      "name": "custom group with owner aliases",
+      "total": 6,
+      "averageReplySeconds": 9,
+      "streak": {
+        "days": 1,
+        "start": "2026-01-01",
+        "end": "2026-01-01"
+      },
+      "busiestDay": {
+        "date": "2026-01-01",
+        "count": 6
+      },
+      "daily": [
+        {
+          "date": "2026-01-01",
+          "count": 6,
+          "average": 6
+        }
+      ],
+      "engagement": 100,
+      "delayScore": 99.85,
+      "doubleTexts": 0,
+      "doubleTextScore": 0,
+      "initiations": 1,
+      "initiationScore": 16.666666666666664,
+      "medians": {
+        "Me": 15,
+        "Peer": 9,
+        "Me WhatsApp": 5,
+        "Peer alt": 7
+      },
+      "senderDoubles": {},
+      "senderInitiations": {
+        "Me": 1
+      }
+    },
+    {
+      "name": "native multi-account group",
+      "total": 6,
+      "averageReplySeconds": 40,
+      "streak": {
+        "days": 1,
+        "start": "2026-01-01",
+        "end": "2026-01-01"
+      },
+      "busiestDay": {
+        "date": "2026-01-01",
+        "count": 6
+      },
+      "daily": [
+        {
+          "date": "2026-01-01",
+          "count": 6,
+          "average": 6
+        }
+      ],
+      "engagement": 50,
+      "delayScore": 99.33333333333333,
+      "doubleTexts": 0,
+      "doubleTextScore": 0,
+      "initiations": 1,
+      "initiationScore": 16.666666666666664,
+      "medians": {
+        "Me": 30,
+        "Peer": 30,
+        "Third": 30,
+        "Fourth": 40,
+        "Fifth": 70
+      },
+      "senderDoubles": {},
+      "senderInitiations": {
+        "Me": 1
+      }
+    },
+    {
+      "name": "single sender",
+      "total": 3,
+      "averageReplySeconds": null,
+      "streak": {
+        "days": 1,
+        "start": "2026-01-01",
+        "end": "2026-01-01"
+      },
+      "busiestDay": {
+        "date": "2026-01-01",
+        "count": 3
+      },
+      "daily": [
+        {
+          "date": "2026-01-01",
+          "count": 3,
+          "average": 3
+        }
+      ],
+      "engagement": 100,
+      "delayScore": 100,
+      "doubleTexts": 2,
+      "doubleTextScore": 66.66666666666666,
+      "initiations": 1,
+      "initiationScore": 33.33333333333333,
+      "medians": {
+        "Me": null
+      },
+      "senderDoubles": {
+        "Me": 2
+      },
+      "senderInitiations": {
+        "Me": 1
+      }
+    }
+  ]
+}
