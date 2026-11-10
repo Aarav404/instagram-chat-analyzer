@@ -16,7 +16,7 @@ describe('original Python calculation parity', () => {
     expect(actual.busiestDay).toEqual(expected.busiestDay)
     expect(actual.daily.map(({ date, count, average }) => ({ date, count, average }))).toEqual(expected.daily)
     for (const sender of actual.senders) {
-      expect(sender.medianReplySeconds).toBe((expected.medians as Record<string, number | null>)[sender.name])
+      expect(sender.medianReplySeconds).toBe((expected.medians as unknown as Record<string, number | null>)[sender.name])
       expect(sender.doubleTexts).toBe((expected.senderDoubles as Record<string, number>)[sender.name] || 0)
       expect(sender.initiations).toBe((expected.senderInitiations as Record<string, number>)[sender.name] || 0)
     }

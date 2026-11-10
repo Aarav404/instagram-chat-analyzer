@@ -18,3 +18,4 @@ messages/
 .chat_groups.json
 .env*
 !.env.example
+.vercel
