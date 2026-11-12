@@ -1,3 +1,0 @@
-[server]
-# Instagram exports can be several gigabytes.
-maxUploadSize = 5120

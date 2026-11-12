@@ -39,7 +39,8 @@ export function parseInstagram(text: string, path: string): ParsedPage {
             : record(value.share) ? 'link' : value.gifs || value.sticker ? 'attachment' : 'text'
     const content = typeof value.content === 'string' ? repairUnicode(value.content) : ''
     const link = record(value.share) && typeof value.share.link === 'string' ? value.share.link : ''
-    messages.push({ id: `${conversationId}:${source}:${i}`, conversationId, sender, timestamp: validTimestamp(value.timestamp_ms), text: content || link, kind })
+    const callDurationSeconds = typeof value.call_duration === 'number' && Number.isFinite(value.call_duration) && value.call_duration >= 0 ? value.call_duration : undefined
+    messages.push({ id: `${conversationId}:${source}:${i}`, conversationId, sender, timestamp: validTimestamp(value.timestamp_ms), text: content || link, kind, ...(kind === 'call' && callDurationSeconds !== undefined ? { callDurationSeconds } : {}) })
   }
   return { conversationId, title, platform: 'instagram', participants: [...new Set([...people, ...messages.map((m) => m.sender)])].sort(), messages, warnings: invalid ? [`Skipped ${invalid} malformed message records.`] : [] }
 }

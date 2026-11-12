@@ -1,5 +1,6 @@
 import { openDB, type DBSchema } from 'idb'
 import type { Analysis, ChatGroup, Conversation, Library, Settings, StoredPage } from '../core/types'
+import { withConversationTitle } from '../core/conversation-title'
 
 interface AaloeLyzerDB extends DBSchema {
   conversations: { key: string; value: Conversation }
@@ -30,7 +31,7 @@ export async function getLibrary(): Promise<Library> {
     for (const c of conversations) for (const p of c.participants) frequency.set(p, (frequency.get(p) || 0) + 1)
     settings.ownerNames = [...frequency].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, 1).map(([name]) => name)
   }
-  return { conversations: conversations.sort((a, b) => b.messageCount - a.messageCount), groups, settings }
+  return { conversations: conversations.map((conversation) => withConversationTitle(conversation, settings.ownerNames)).sort((a, b) => b.messageCount - a.messageCount), groups, settings }
 }
 
 export async function getMessages(id: string) {
@@ -41,7 +42,7 @@ export async function getMessages(id: string) {
   return pages.flatMap((page) => page.messages)
 }
 
-export async function savePages(conversation: Pick<Conversation, 'id' | 'title' | 'platform' | 'participants' | 'isDemo'>, pages: StoredPage[]): Promise<{ skipped: number; count: number }> {
+export async function savePages(conversation: Pick<Conversation, 'id' | 'title' | 'titleSource' | 'platform' | 'participants' | 'isDemo'>, pages: StoredPage[]): Promise<{ skipped: number; count: number }> {
   const database = await db()
   const existing = await database.getAllFromIndex('pages', 'conversation', conversation.id)
   const merged = new Map(existing.map((page) => [page.id, page]))

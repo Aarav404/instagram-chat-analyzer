@@ -1,6 +1,11 @@
+import { findCompliments } from './compliments'
+import { wordTokens } from './message-selection'
+import { STOP_WORDS } from './stop-words'
+import { createFrequencyText } from './frequency-text'
 import emojiRegex from 'emoji-regex'
 import { dayKey, dayNumber, isIgnoredSender, numberToDay } from './normalize'
-import type { Analysis, AnalysisRequest, Conversation, CountItem, Message, SenderStats } from './types'
+import { combinesGroupAccounts, senderIdentity } from './sender-identity'
+import type { Analysis, AnalysisRequest, Conversation, CountItem, Message, SenderStats, ComplimentCategory, ComplimentExample, CallSenderStats, CallDailyPoint } from './types'
 
 const SESSION_GAP = 6 * 60 * 60
 const MAX_REPLY_GAP = 7 * 24 * 60 * 60
@@ -18,7 +23,7 @@ const clamp = (n: number) => Math.max(0, Math.min(100, n))
 export function matchesFilters(message: Message, request: AnalysisRequest): boolean {
   if (isIgnoredSender(message.sender)) return false
   const { from, to, sender, query } = request.filters
-  if (sender && message.sender !== sender) return false
+  if (sender && senderIdentity(message.sender, request) !== sender) return false
   if (query && !message.text.toLocaleLowerCase().includes(query.toLocaleLowerCase())) return false
   if (from || to) {
     if (message.timestamp === null) return false
@@ -40,6 +45,17 @@ export class Analyzer {
   private emojis = new Map<string, number>()
   private kinds = new Map<string, number>()
   private threads = new Map<string, number>()
+  private complimentCounts = new Map<string, Map<ComplimentCategory, number>>()
+  private complimentPhrases = new Map<string, Map<string, number>>()
+  private complimentMonths = new Map<string, number>()
+  private complimentExamples: ComplimentExample[] = []
+  private complimentTotal = 0
+  private callCounts = new Map<string, number>()
+  private callDurations = new Map<string, number[]>()
+  private callDaily = new Map<string, { calls: number; totalDurationSeconds: number; durationCount: number }>()
+  private totalCalls = 0
+  private totalCallDurationSeconds = 0
+  private totalCallDurationCount = 0
   private wordCount = 0
   private replies = new Map<string, number[]>()
   private withinReplies = new Map<string, number[]>()
@@ -50,28 +66,59 @@ export class Analyzer {
   private own: Set<string>
   private participantCount = 0
   private emojiPattern = emojiRegex()
-  constructor(private request: AnalysisRequest) { this.own = new Set(request.settings.ownerNames) }
+  constructor(private request: AnalysisRequest) { this.own = new Set(combinesGroupAccounts(request) ? ['You'] : request.settings.ownerNames) }
 
   add(conversation: Conversation, messages: Message[]): void {
     if (this.request.filters.platform !== 'all' && conversation.platform !== this.request.filters.platform) return
-    const filtered = messages.filter((m) => matchesFilters(m, this.request))
+    const frequencyText = createFrequencyText(conversation.participants)
+    const filtered = messages.filter((m) => matchesFilters(m, this.request)).map((message) => {
+      const sender = senderIdentity(message.sender, this.request)
+      return sender === message.sender ? message : { ...message, sender }
+    })
     this.participantCount = Math.max(this.participantCount, conversation.participants.length)
     increment(this.threads, conversation.id, filtered.length)
     const dated: Message[] = []
     for (const message of filtered) {
       this.total++
       increment(this.senders, message.sender)
+      if (message.kind === 'call') {
+        this.totalCalls++
+        increment(this.callCounts, message.sender)
+        const dailyKey = message.timestamp === null ? null : `${dayKey(message.timestamp)}\u0000${message.sender}`
+        const daily = dailyKey ? this.callDaily.get(dailyKey) || { calls: 0, totalDurationSeconds: 0, durationCount: 0 } : null
+        if (daily) { daily.calls++; this.callDaily.set(dailyKey!, daily) }
+        const seconds = message.callDurationSeconds
+        if (typeof seconds === 'number' && Number.isFinite(seconds) && seconds >= 0) {
+          const values = this.callDurations.get(message.sender) || []
+          values.push(seconds)
+          this.callDurations.set(message.sender, values)
+          this.totalCallDurationSeconds += seconds
+          this.totalCallDurationCount++
+          if (daily) { daily.totalDurationSeconds += seconds; daily.durationCount++ }
+        }
+      }
+      for (const { category, phrase } of findCompliments(message.text)) {
+        this.complimentTotal++
+        const categories = this.complimentCounts.get(message.sender) || new Map<ComplimentCategory, number>()
+        categories.set(category, (categories.get(category) || 0) + 1)
+        this.complimentCounts.set(message.sender, categories)
+        const phrases = this.complimentPhrases.get(message.sender) || new Map<string, number>()
+        increment(phrases, phrase)
+        this.complimentPhrases.set(message.sender, phrases)
+        if (message.timestamp !== null) increment(this.complimentMonths, `${dayKey(message.timestamp).slice(0, 7)}\u0000${message.sender}`)
+        if (this.complimentExamples.length < 500) this.complimentExamples.push({ sender: message.sender, text: message.text, timestamp: message.timestamp, category, phrase })
+      }
       increment(this.kinds, message.kind)
       const tokens = message.text.trim().split(/\s+/).filter(Boolean)
       this.wordCount += tokens.length
-      for (const word of tokens) {
-        const clean = word.toLocaleLowerCase().replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '')
-        if (clean.length > 1 && clean.length < 45 && !clean.startsWith('http') && !/\d/.test(clean)) {
+      const frequencyInput = frequencyText(message.text)
+      for (const { word: clean } of wordTokens(frequencyInput)) {
+        if (clean.length > 1 && clean.length < 45 && !STOP_WORDS.has(clean) && !clean.startsWith('http') && !/\d/.test(clean)) {
           // Bounded vocabulary prevents pathological inputs from consuming unbounded memory.
           if (this.words.size < 100_000 || this.words.has(clean)) increment(this.words, clean)
         }
       }
-      for (const match of message.text.matchAll(this.emojiPattern)) increment(this.emojis, match[0])
+      for (const match of frequencyInput.matchAll(this.emojiPattern)) increment(this.emojis, match[0])
       if (message.timestamp === null) continue
       this.datedTotal++
       dated.push(message)
@@ -157,7 +204,7 @@ export class Analyzer {
     })
     const isSides = this.request.settings.shareMode === 'sides' || (this.request.settings.shareMode === 'auto' && (!!this.request.groupName || this.participantCount <= 2))
     let counts = [...this.senders].map(([name, count]) => ({ name, count }))
-    if (isSides && this.own.size) {
+    if (isSides && this.own.size && !combinesGroupAccounts(this.request)) {
       const ownCount = [...this.senders].reduce((n, [name, count]) => n + (this.own.has(name) ? count : 0), 0)
       const otherNames = [...this.senders.keys()].filter((s) => !this.own.has(s))
       counts = [{ name: 'You', count: ownCount }, { name: this.request.groupName || (otherNames.length === 1 ? otherNames[0] : 'Others'), count: this.total - ownCount }].filter((item) => item.count > 0)
@@ -173,6 +220,19 @@ export class Analyzer {
       betweenSessionAverageSeconds: average(this.betweenReplies.get(name) || []),
       doubleTexts: this.doubles.get(name) || 0, initiations: this.starts.get(name) || 0,
     })).sort((a, b) => b.count - a.count)
+    const categories = ['Personality', 'Appearance', 'Ability', 'Affection / humor'] as const
+    const complimentSenders = [...this.complimentCounts].map(([name, counts]) => {
+      const values = Object.fromEntries(categories.map((category) => [category, counts.get(category) || 0])) as Record<ComplimentCategory, number>
+      const count = Object.values(values).reduce((sum, value) => sum + value, 0)
+      return { name, count, perThousand: (count / Math.max(this.senders.get(name) || 0, 1)) * 1000, topCategory: categories.reduce<ComplimentCategory | null>((best, category) => values[category] > (best ? values[best] : 0) ? category : best, null), categories: values, phrases: top(this.complimentPhrases.get(name) || new Map(), 100) }
+    }).sort((a, b) => b.count - a.count)
+    const monthly = [...this.complimentMonths].map(([key, count]) => { const [month, sender] = key.split('\u0000'); return { month, sender, count } }).sort((a, b) => a.month.localeCompare(b.month) || a.sender.localeCompare(b.sender))
+    const callSenders: CallSenderStats[] = [...this.callCounts].map(([name, calls]) => {
+      const durations = this.callDurations.get(name) || []
+      const totalDurationSeconds = durations.reduce((sum, value) => sum + value, 0)
+      return { name, calls, durationCount: durations.length, totalDurationSeconds, averageDurationSeconds: durations.length ? totalDurationSeconds / durations.length : null }
+    }).sort((a, b) => b.calls - a.calls || a.name.localeCompare(b.name))
+    const callDailyPoints: CallDailyPoint[] = [...this.callDaily].map(([key, value]) => { const [date, sender] = key.split('\u0000'); return { date, sender, ...value } }).sort((a, b) => a.date.localeCompare(b.date) || a.sender.localeCompare(b.sender))
     let replySum = 0, replyCount = 0, sessionSum = 0, sessionCount = 0
     for (const values of this.replies.values()) for (const value of values) { replySum += value; replyCount++ }
     for (const values of this.withinReplies.values()) for (const value of values) { sessionSum += value; sessionCount++ }
@@ -189,7 +249,9 @@ export class Analyzer {
       averageSessionReplySeconds: avgSession, doubleTexts: doubles,
       doubleTextScore: clamp(doubles / Math.max(this.datedTotal, 1) * 100),
       initiations, initiationScore: clamp(initiations / Math.max(this.datedTotal, 1) * 100),
-      words: this.wordCount, topWords: top(this.words), emojis: top(this.emojis), kinds: top(this.kinds), threads: top(this.threads, 1000),
+      words: this.wordCount, topWords: top(this.words, 100), emojis: top(this.emojis), kinds: top(this.kinds), threads: top(this.threads, 1000),
+      compliments: { total: this.complimentTotal, senders: complimentSenders, monthly, examples: this.complimentExamples },
+      calls: { totalCalls: this.totalCalls, durationCount: this.totalCallDurationCount, totalDurationSeconds: this.totalCallDurationSeconds, averageDurationSeconds: this.totalCallDurationCount ? this.totalCallDurationSeconds / this.totalCallDurationCount : null, senders: callSenders, daily: callDailyPoints },
       processingMs: performance.now() - this.started,
     }
   }

@@ -24,6 +24,41 @@ describe('original Python calculation parity', () => {
 })
 
 describe('standard mode fixes and filtering', () => {
+  it('summarizes call initiations and durations by sender and day', () => {
+    const calls = [
+      { ...message('Me', 0), kind: 'call' as const, callDurationSeconds: 60 },
+      { ...message('Peer', 86400), kind: 'call' as const, callDurationSeconds: 120 },
+      { ...message('Me', 172800), kind: 'call' as const },
+      { ...message('Peer', null), kind: 'call' as const, callDurationSeconds: 0 },
+    ]
+    const actual = analyze([{ conversation: conversation('chat-a', calls), messages: calls }], request()).calls
+    expect(actual.totalCalls).toBe(4)
+    expect(actual.durationCount).toBe(3)
+    expect(actual.totalDurationSeconds).toBe(180)
+    expect(actual.averageDurationSeconds).toBe(60)
+    expect(actual.senders).toEqual([
+      { name: 'Me', calls: 2, durationCount: 1, totalDurationSeconds: 60, averageDurationSeconds: 60 },
+      { name: 'Peer', calls: 2, durationCount: 2, totalDurationSeconds: 120, averageDurationSeconds: 60 },
+    ])
+    expect(actual.daily.map(({ date, sender, calls: count, totalDurationSeconds }) => [date, sender, count, totalDurationSeconds])).toEqual([
+      ['2026-01-01', 'Me', 1, 60], ['2026-01-02', 'Peer', 1, 120], ['2026-01-03', 'Me', 1, 0],
+    ])
+  })
+  it('recognizes and preserves common Hinglish compliment phrases for highlighting', () => {
+    const messages = [message('Me', 0, 'chat-a', 'Tum bahut pyaari ho aur bohot smart ho')]
+    const result = analyze([{ conversation: conversation('chat-a', messages), messages }], request()).compliments
+    expect(result.total).toBe(2)
+    expect(result.examples.map((example) => example.phrase)).toEqual(['tum bahut pyaari ho', 'bohot smart ho'])
+    expect(result.senders[0].categories.Appearance).toBe(1)
+    expect(result.senders[0].categories.Ability).toBe(1)
+  })
+  it('applies sender and date filters to call analytics and handles old call records without durations', () => {
+    const calls = [{ ...message('Me', 0), kind: 'call' as const }, { ...message('Peer', 86400), kind: 'call' as const, callDurationSeconds: 30 }]
+    const old = analyze([{ conversation: conversation('chat-a', [calls[0]]), messages: [calls[0]] }], request()).calls
+    expect(old.durationCount).toBe(0)
+    const req = request(); req.filters.sender = 'Peer'; req.filters.from = '2026-01-02'; req.filters.to = '2026-01-02'
+    expect(analyze([{ conversation: conversation('chat-a', calls), messages: calls }], req).calls.totalCalls).toBe(1)
+  })
   it('does not invent cross-thread replies or lose unreturned double texts', () => {
     const a = [message('Me', 0), message('Me', 1), message('Me', 2)]
     const b = [message('Peer', 3, 'chat-b'), message('Peer', 4, 'chat-b')]

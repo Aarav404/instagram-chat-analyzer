@@ -2,6 +2,9 @@ import { lazy, Suspense, useCallback, useEffect, useState } from 'react'
 import { ArrowRight, ArrowUpRight, BookOpen, ChevronRight, Instagram, LayoutGrid, Layers, Menu, MessageCircle, Plus, Trash2, X } from 'lucide-react'
 import type { AnalysisRequest, ChatGroup, Filters as FilterState, Library, Settings as Preferences } from './core/types'
 import { EMPTY_FILTERS } from './core/types'
+import { withConversationTitle } from './core/conversation-title'
+import { senderIdentity } from './core/sender-identity'
+import { isIgnoredSender } from './core/normalize'
 import { worker } from './lib/worker-client'
 import { compact, number } from './lib/utils'
 import { Button } from './components/ui/button'
@@ -54,9 +57,10 @@ export default function App() {
     if (!library) return
     const previous = library.settings
     const settings = { ...previous, ...patch }
-    setLibrary((current) => current && { ...current, settings })
+    if (patch.ownerNames) setFilters((current) => ({ ...current, sender: '' }))
+    setLibrary((current) => current && { ...current, settings, conversations: current.conversations.map((conversation) => withConversationTitle(conversation, settings.ownerNames)) })
     try { await worker.call('saveSettings', settings) }
-    catch (e) { setLibrary((current) => current && { ...current, settings: previous }); setError((e as Error).message) }
+    catch (e) { setLibrary((current) => current && { ...current, settings: previous, conversations: current.conversations.map((conversation) => withConversationTitle(conversation, previous.ownerNames)) }); setError((e as Error).message) }
   }
 
   async function deleteAllData() {
@@ -86,7 +90,7 @@ export default function App() {
   const selectionMissing = (page.startsWith('chat:') && !selected) || (page.startsWith('group:') && !group)
   const selectedIds = selected ? [selected.id] : group ? group.conversationIds : conversations.map((c) => c.id)
   const request: AnalysisRequest | null = library ? { conversationIds: selectedIds, filters, groupName: group?.name, settings: library.settings } : null
-  const senders = [...new Set(conversations.filter((c) => selectedIds.includes(c.id)).flatMap((c) => c.participants))].sort()
+  const senders = [...new Set(conversations.filter((c) => selectedIds.includes(c.id)).flatMap((c) => c.participants).filter((name) => !isIgnoredSender(name)).map((name) => request ? senderIdentity(name, request) : name))].sort()
   const accountNames = [...new Set(conversations.flatMap((c) => c.participants))].sort()
   const navItems = [{ id: 'overview' as Page, label: 'Overview', icon: LayoutGrid }, { id: 'conversations' as Page, label: 'Conversations', icon: MessageCircle }, { id: 'groups' as Page, label: 'Groups', icon: Layers }]
   const pageTitle = selected?.title || group?.name || ({ overview: 'Overview', conversations: 'Conversations', groups: 'Groups', guide: 'Import guide' } as Record<string, string>)[page] || 'Conversation'

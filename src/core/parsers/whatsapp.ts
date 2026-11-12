@@ -1,5 +1,6 @@
 import type { ImportOptions, Message, ParsedPage } from '../types'
 import { isIgnoredSender, normalizeName, stableId } from '../normalize'
+import { isGenericWhatsAppTitle } from '../conversation-title'
 
 const prefix = /^(?:\[)?(\d{1,4}[/.\-]\d{1,2}[/.\-]\d{1,4}),?\s+(\d{1,2}):(\d{2})(?::(\d{2}))?\s*([ap]\.?m\.?)?(?:\]\s*|\s+-\s+)(.*)$/i
 function parseTime(date: string, hour: string, minute: string, second: string | undefined, period: string | undefined, order: ImportOptions['dateOrder']): number | null {
@@ -18,7 +19,9 @@ function parseTime(date: string, hour: string, minute: string, second: string | 
 }
 
 export function parseWhatsApp(text: string, filename: string, options: ImportOptions = { dateOrder: 'DMY' }): ParsedPage {
-  const title = filename.split('/').at(-1)!.replace(/\.txt$/i, '').replace(/^WhatsApp Chat (?:with|-)\s*/i, '').replace(/^_chat$/, 'WhatsApp conversation')
+  const basename = filename.split('/').at(-1)!.replace(/\.txt$/i, '')
+  const namedExport = /^WhatsApp Chat (?:with|-)\s*\S/i.test(basename)
+  const exportTitle = basename.replace(/^WhatsApp Chat (?:with|-)\s*/i, '').replace(/^_chat$/, 'WhatsApp conversation')
   const lines = text.replace(/^\ufeff/, '').split(/\r?\n/)
   const pending: Omit<Message, 'id' | 'conversationId'>[] = []
   let current: Omit<Message, 'id' | 'conversationId'> | null = null
@@ -43,6 +46,10 @@ export function parseWhatsApp(text: string, filename: string, options: ImportOpt
   if (current) pending.push(current)
   if (!pending.length) throw new Error('No WhatsApp messages found. Use Export chat → Without media, and check the day/month order.')
   const participants = [...new Set(pending.map((m) => m.sender))].sort()
-  const conversationId = `wa-${stableId(`${title}:${participants.join('|')}`)}`
-  return { conversationId, title, platform: 'whatsapp', participants, messages: pending.map((m, i) => ({ ...m, conversationId, id: `${conversationId}:${i}` })), warnings: invalid ? [`Skipped ${invalid} messages with invalid dates. Check the selected date format.`] : [] }
+  const titleSource = !namedExport && isGenericWhatsAppTitle(exportTitle) ? 'participants' : 'export'
+  const title = titleSource === 'participants' ? participants.join(', ') : exportTitle
+  // Preserve existing import IDs: display names and account selection must not
+  // create duplicate conversations or break saved groups when reimporting.
+  const conversationId = `wa-${stableId(`${exportTitle}:${participants.join('|')}`)}`
+  return { conversationId, title, titleSource, platform: 'whatsapp', participants, messages: pending.map((m, i) => ({ ...m, conversationId, id: `${conversationId}:${i}` })), warnings: invalid ? [`Skipped ${invalid} messages with invalid dates. Check the selected date format.`] : [] }
 }

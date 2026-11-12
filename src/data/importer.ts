@@ -49,7 +49,7 @@ export async function importFiles(files: File[], options: ImportOptions, onProgr
     }
     for (const bucket of buckets.values()) {
       if (cancelled()) break
-      const parsedConversations = new Map<string, { metadata: Pick<Conversation, 'id' | 'title' | 'platform' | 'participants'>; pages: StoredPage[] }>()
+      const parsedConversations = new Map<string, { metadata: Pick<Conversation, 'id' | 'title' | 'titleSource' | 'platform' | 'participants'>; pages: StoredPage[] }>()
       for (const entry of bucket.sort((a, b) => a.path.localeCompare(b.path))) {
         if (cancelled()) break
         onProgress({ phase: 'Reading messages', completed, total: entries.length, messages: report.messages })
@@ -63,7 +63,7 @@ export async function importFiles(files: File[], options: ImportOptions, onProgr
           parsed.warnings.forEach(warn)
           const source = isWhatsApp ? 'whatsapp-export' : entry.path.split('/').at(-1)!
           const contentDigest = await digestText(text)
-          const item = parsedConversations.get(parsed.conversationId) || { metadata: { id: parsed.conversationId, title: parsed.title, platform: parsed.platform, participants: parsed.participants }, pages: [] }
+          const item = parsedConversations.get(parsed.conversationId) || { metadata: { id: parsed.conversationId, title: parsed.title, titleSource: parsed.titleSource, platform: parsed.platform, participants: parsed.participants }, pages: [] }
           item.metadata.participants = [...new Set([...item.metadata.participants, ...parsed.participants])]
           item.pages.push({ id: `${parsed.conversationId}/${source}`, conversationId: parsed.conversationId, source, digest: contentDigest, messages: parsed.messages })
           parsedConversations.set(parsed.conversationId, item)

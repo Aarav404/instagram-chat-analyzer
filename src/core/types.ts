@@ -10,10 +10,12 @@ export interface Message {
   timestamp: number | null
   text: string
   kind: MessageKind
+  callDurationSeconds?: number
 }
 export interface Conversation {
   id: string
   title: string
+  titleSource?: 'export' | 'participants'
   platform: Platform
   participants: string[]
   messageCount: number
@@ -26,6 +28,7 @@ export interface Conversation {
 export interface ParsedPage {
   conversationId: string
   title: string
+  titleSource?: 'export' | 'participants'
   platform: Platform
   participants: string[]
   messages: Message[]
@@ -55,6 +58,13 @@ export interface SenderStats extends CountItem {
   initiations: number
 }
 export interface DailyPoint { date: string; count: number; average: number; sent: number; received: number }
+export type ComplimentCategory = 'Personality' | 'Appearance' | 'Ability' | 'Affection / humor'
+export interface ComplimentSender { name: string; count: number; perThousand: number; topCategory: ComplimentCategory | null; categories: Record<ComplimentCategory, number>; phrases: CountItem[] }
+export interface ComplimentExample { sender: string; text: string; timestamp: number | null; category: ComplimentCategory; phrase: string }
+export interface Compliments { total: number; senders: ComplimentSender[]; monthly: { month: string; sender: string; count: number }[]; examples: ComplimentExample[] }
+export interface CallSenderStats { name: string; calls: number; durationCount: number; totalDurationSeconds: number; averageDurationSeconds: number | null }
+export interface CallDailyPoint { date: string; sender: string; calls: number; totalDurationSeconds: number; durationCount: number }
+export interface CallAnalytics { totalCalls: number; durationCount: number; totalDurationSeconds: number; averageDurationSeconds: number | null; senders: CallSenderStats[]; daily: CallDailyPoint[] }
 export interface Analysis {
   total: number
   datedTotal: number
@@ -80,17 +90,30 @@ export interface Analysis {
   emojis: CountItem[]
   kinds: CountItem[]
   threads: CountItem[]
+  compliments: Compliments
+  calls: CallAnalytics
   processingMs: number
 }
 export interface ImportProgress { phase: string; completed: number; total: number; messages: number }
 export interface ImportReport { imported: number; skipped: number; messages: number; warnings: string[]; durationMs: number; cancelled: boolean }
 export interface ImportOptions { dateOrder: 'DMY' | 'MDY' }
-export interface MessagePage { messages: Message[]; total: number; offset: number }
+export type SenderSelection = { kind: 'identity'; name: string } | { kind: 'side'; side: 'you' | 'others' }
+export type MessageSelection = { title: string; sender?: SenderSelection } & (
+  | { kind: 'compliment'; phrase?: string; month?: string }
+  | { kind: 'day'; date: string }
+  | { kind: 'word'; word: string }
+  | { kind: 'emoji'; emoji: string }
+  | { kind: 'type'; messageKind: MessageKind }
+)
+export interface TextRange { start: number; end: number }
+export interface MatchedMessage extends Message { highlights?: TextRange[] }
+export type OpenMessages = (selection: MessageSelection) => void
+export interface MessagePage { messages: MatchedMessage[]; total: number; offset: number }
 export interface WorkerMethods {
   library: { input: undefined; output: Library }
   import: { input: { files: File[]; options: ImportOptions }; output: ImportReport }
   analyze: { input: AnalysisRequest; output: Analysis }
-  messages: { input: { request: AnalysisRequest; offset: number; limit: number }; output: MessagePage }
+  messages: { input: { request: AnalysisRequest; offset: number; limit: number; selection?: MessageSelection; search?: string }; output: MessagePage }
   saveSettings: { input: Settings; output: Settings }
   saveGroup: { input: ChatGroup; output: ChatGroup[] }
   removeGroup: { input: string; output: ChatGroup[] }

@@ -1,12 +1,12 @@
 import { useMemo } from 'react'
 import type { EChartsOption } from 'echarts'
-import type { Analysis } from '@/core/types'
+import type { Analysis, OpenMessages } from '@/core/types'
 import { compact, dateLabel, number } from '@/lib/utils'
 import { Chart } from './Chart'
 
 const axis = { axisLine: { show: false }, axisTick: { show: false }, axisLabel: { color: '#888f89', fontSize: 11 }, splitLine: { lineStyle: { color: '#272c28', type: 'dashed' as const } } }
 const tooltip = { trigger: 'axis' as const, renderMode: 'richText' as const, backgroundColor: '#232923', borderColor: '#3a433a', textStyle: { color: '#f0f2ee', fontSize: 12 }, padding: 12, confine: true }
-export function Timeline({ analysis, split = false }: { analysis: Analysis; split?: boolean }) {
+export function Timeline({ analysis, split = false, onOpenMessages }: { analysis: Analysis; split?: boolean; onOpenMessages: OpenMessages }) {
   const option = useMemo<EChartsOption>(() => ({
     grid: { left: 46, right: 16, top: 24, bottom: 55 },
     tooltip,
@@ -14,14 +14,16 @@ export function Timeline({ analysis, split = false }: { analysis: Analysis; spli
     yAxis: { ...axis, type: 'value', minInterval: 1, axisLabel: { ...axis.axisLabel, formatter: (value: number) => compact(value) } },
     dataZoom: [{ type: 'inside', filterMode: 'none' }, { type: 'slider', height: 16, bottom: 4, borderColor: 'transparent', backgroundColor: '#1b201b', fillerColor: '#c3ee8d15', handleStyle: { color: '#63725a' }, dataBackground: { lineStyle: { color: '#46523e' }, areaStyle: { color: '#26321f' } }, selectedDataBackground: { lineStyle: { color: '#839570' }, areaStyle: { color: '#33422b' } }, textStyle: { color: '#8c938b' }, showDetail: false }],
     series: split ? [
-      { name: 'You', type: 'bar', data: analysis.daily.map((d) => d.sent), stack: 'messages', itemStyle: { color: '#c3ee8d' }, barMaxWidth: 10, large: true },
-      { name: 'Others', type: 'bar', data: analysis.daily.map((d) => d.received), stack: 'messages', itemStyle: { color: '#81b7f5' }, barMaxWidth: 10, large: true },
+      { name: 'You', type: 'bar', data: analysis.daily.map((d) => ({ name: d.date, value: d.sent })), stack: 'messages', itemStyle: { color: '#c3ee8d' }, barMaxWidth: 10, cursor: 'pointer' },
+      { name: 'Others', type: 'bar', data: analysis.daily.map((d) => ({ name: d.date, value: d.received })), stack: 'messages', itemStyle: { color: '#81b7f5' }, barMaxWidth: 10, cursor: 'pointer' },
     ] : [
-      { name: 'Messages', type: 'line', data: analysis.daily.map((d) => d.count), showSymbol: false, sampling: 'lttb', lineStyle: { color: '#7e9670', width: 1.2, opacity: .8 }, areaStyle: { color: '#c3ee8d', opacity: .035 }, itemStyle: { color: '#7e9670' } },
-      { name: '7-day average', type: 'line', data: analysis.daily.map((d) => Math.round(d.average * 10) / 10), showSymbol: false, sampling: 'lttb', smooth: .2, lineStyle: { color: '#c3ee8d', width: 2.5 }, itemStyle: { color: '#c3ee8d' } },
+      { name: 'Messages', type: 'line', data: analysis.daily.map((d) => ({ name: d.date, value: d.count })), showSymbol: true, symbolSize: 5, cursor: 'pointer', sampling: 'lttb', lineStyle: { color: '#7e9670', width: 1.2, opacity: .8 }, areaStyle: { color: '#c3ee8d', opacity: .035 }, itemStyle: { color: '#7e9670' } },
+      { name: '7-day average', type: 'line', silent: true, cursor: 'default', data: analysis.daily.map((d) => Math.round(d.average * 10) / 10), showSymbol: false, sampling: 'lttb', smooth: .2, lineStyle: { color: '#c3ee8d', width: 2.5 }, itemStyle: { color: '#c3ee8d' } },
     ],
   }), [analysis, split])
-  return <Chart option={option} label={`Daily message activity from ${analysis.firstDate} to ${analysis.lastDate}. ${number(analysis.total)} messages.`} />
+  const selectDay = (date: string, series: string) => onOpenMessages({ kind: 'day', date, title: `Messages on ${dateLabel(date, true)}${split ? ` · ${series}` : ''}`, ...(split ? { sender: { kind: 'side' as const, side: series === 'You' ? 'you' as const : 'others' as const } } : {}) })
+  const actions = analysis.daily.flatMap((day) => (split ? [{ series: 'You', count: day.sent }, { series: 'Others', count: day.received }] : [{ series: 'Messages', count: day.count }]).filter((item) => item.count > 0).map((item) => ({ label: `${dateLabel(day.date, true)} · ${item.series} · ${number(item.count)}`, select: () => selectDay(day.date, item.series) })))
+  return <Chart option={option} actions={actions} onPointClick={(event) => { if (event.seriesName !== '7-day average' && /^\d{4}-\d{2}-\d{2}$/.test(event.name)) selectDay(event.name, event.seriesName || 'Messages') }} label={`Daily message activity from ${analysis.firstDate} to ${analysis.lastDate}. ${number(analysis.total)} messages.`} />
 }
 export function Ring({ value, color = '#c3ee8d', size = 112, label }: { value: number | null; color?: string; size?: number; label: string }) {
   const option = useMemo<EChartsOption>(() => ({
