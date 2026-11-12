@@ -1,4 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useState } from 'react'
+import { Analytics } from '@vercel/analytics/react'
 import { ArrowRight, ArrowUpRight, BookOpen, ChevronRight, Instagram, LayoutGrid, Layers, Menu, MessageCircle, Plus, Trash2, X } from 'lucide-react'
 import type { AnalysisRequest, ChatGroup, Filters as FilterState, Library, Settings as Preferences } from './core/types'
 import { EMPTY_FILTERS } from './core/types'
@@ -164,6 +165,7 @@ export default function App() {
         </DialogFooter>
       </DialogContent>
     </Dialog>
+    <Analytics />
   </div></TooltipProvider>
 }
 
